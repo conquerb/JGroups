@@ -250,6 +250,17 @@ public class MessageBatch implements Iterable<Message> {
         return sb.toString();
     }
 
+    public String printHeaders() {
+        StringBuilder sb=new StringBuilder().append("dest=" + dest);
+        if(sender != null)
+            sb.append(", sender=").append(sender);
+        sb.append("\n").append(size()).append(":\n");
+        int count=1;
+        for(Message msg: this)
+            sb.append("#").append(count++).append(": ").append(msg.printHeaders()).append("\n");
+        return sb.toString();
+    }
+
     protected void resize() {
         Message[] tmp=new Message[messages.length + INCR];
         System.arraycopy(messages,0,tmp,0,messages.length);
