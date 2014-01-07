@@ -173,7 +173,7 @@ public class UPerf extends ReceiverAdapter {
         }
 
         long total_time=System.currentTimeMillis() - start;
-        System.out.println("done (in " + total_time + " ms)");
+        System.out.println("\ndone (in " + total_time + " ms)");
         return new Results(total_gets, total_puts, total_time);
     }
 
@@ -290,7 +290,7 @@ public class UPerf extends ReceiverAdapter {
 
     /** Kicks off the benchmark on all cluster nodes */
     void startBenchmark() {
-        RspList<Object> responses=null;
+        RspList<Results> responses=null;
         try {
             RequestOptions options=new RequestOptions(ResponseMode.GET_ALL, 0);
             options.setFlags(Message.Flag.OOB, Message.Flag.DONT_BUNDLE, Message.Flag.NO_FC);
@@ -305,10 +305,10 @@ public class UPerf extends ReceiverAdapter {
         long total_time=0;
 
         System.out.println("\n======================= Results: ===========================");
-        for(Map.Entry<Address,Rsp<Object>> entry: responses.entrySet()) {
+        for(Map.Entry<Address,Rsp<Results>> entry: responses.entrySet()) {
             Address mbr=entry.getKey();
-            Rsp rsp=entry.getValue();
-            Results result=(Results)rsp.getValue();
+            Rsp<Results> rsp=entry.getValue();
+            Results result=rsp.getValue();
             total_reqs+=result.num_gets + result.num_puts;
             total_time+=result.time;
             System.out.println(mbr + ": " + result);
@@ -426,7 +426,7 @@ public class UPerf extends ReceiverAdapter {
                 long i=num_msgs_sent.getAndIncrement();
                 if(i >= num_msgs_to_send)
                     break;
-                if(i % PRINT == 0)
+                if(i > 0 && i % PRINT == 0)
                     System.out.print(".");
                 
                 boolean get=Util.tossWeightedCoin(read_percentage);

@@ -1590,9 +1590,15 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
                     boolean oob=msg.isFlagSet(Message.Flag.OOB), internal=msg.isFlagSet(Message.Flag.INTERNAL);
                     msg.putHeader(id, new TpHeader(oob_batch.clusterName()));
                     Executor pool=pickThreadPool(oob, internal);
-                    pool.execute(new SingleMessageHandler(msg));
-                    oob_batch.remove(msg);
-                    num_oob_msgs_received++;
+                    try {
+                        pool.execute(new SingleMessageHandler(msg));
+                        oob_batch.remove(msg);
+                        num_oob_msgs_received++;
+                    }
+                    catch(Throwable t) {
+                        log.error("%s: failed submitting DONT_BUNDLE message to thread pool: %s. Msg: %s",
+                                  local_addr, t, msg.printHeaders());
+                    }
                 }
             }
         }
