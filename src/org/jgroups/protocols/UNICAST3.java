@@ -12,6 +12,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.util.*;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -663,7 +664,7 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
      * e.received_msgs is null and <code>first</code> is true: create a new AckReceiverWindow(seqno) and
      * add message. Set e.received_msgs to the new window. Else just add the message.
      */
-    protected void handleDataReceived(Address sender, long seqno, short conn_id,  boolean first, final Message msg, Event evt) {
+    protected void handleDataReceived(final Address sender, long seqno, short conn_id,  boolean first, final Message msg, Event evt) {
         if(log.isTraceEnabled())
             log.trace("%s <-- DATA(%s: #%d, conn_id=%d%s)", local_addr, sender, seqno, conn_id, first? ", first" : "");
 
@@ -677,7 +678,7 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
         boolean oob=msg.isFlagSet(Message.Flag.OOB);
         if(oob) // done so this thread delivers the message and no work stealing for OOB msgs is performed (JGRP-1733)
             msg.setTransientFlag(Message.TransientFlag.OOB_DELIVERED);
-        Table<Message> win=entry.received_msgs;
+        final Table<Message> win=entry.received_msgs;
         boolean added=win.add(seqno, msg); // win is guaranteed to be non-null if we get here
         num_msgs_received++;
 
@@ -701,8 +702,20 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
 
         // we don't steal work if the message is internal (https://issues.jboss.org/browse/JGRP-1733)
         // we also don't care if the message was added successfully or not
-        if(oob && msg.isFlagSet(Message.Flag.INTERNAL))
+        if(oob && msg.isFlagSet(Message.Flag.INTERNAL)) {
+            // If there are other msgs, tell the regular thread pool to handle them (https://issues.jboss.org/browse/JGRP-1732)
+            final AtomicBoolean processing=win.getProcessing();
+            if(!win.isEmpty() && !processing.get() && seqno < win.getHighestReceived()) {
+                Executor pool=getTransport().getDefaultThreadPool();
+                pool.execute(new Runnable() {
+                    public void run() {
+                        if(processing.compareAndSet(false, true))
+                            removeAndDeliver(processing, win, sender);
+                    }
+                });
+            }
             return;
+        }
 
         final AtomicBoolean processing=win.getProcessing();
         if(processing.compareAndSet(false, true))
