@@ -737,13 +737,16 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
 
         // OOB msg is passed up. When removed, we discard it. Affects ordering: http://jira.jboss.com/jira/browse/JGRP-379
         if(added && oob) {
-            MessageBatch oob_batch=new MessageBatch(local_addr, sender, null, false, MessageBatch.Mode.OOB, msgs.size());
+            MessageBatch oob_batch=null;
             for(Tuple<Long,Message> tuple: msgs) {
                 Message msg=tuple.getVal2();
-                if(msg.isFlagSet(Message.Flag.OOB) && msg.setTransientFlagIfAbsent(Message.TransientFlag.OOB_DELIVERED))
+                if(msg.isFlagSet(Message.Flag.OOB) && msg.setTransientFlagIfAbsent(Message.TransientFlag.OOB_DELIVERED)) {
+                    if(oob_batch == null)
+                        oob_batch=new MessageBatch(local_addr, sender, null, false, MessageBatch.Mode.OOB, msgs.size());
                     oob_batch.add(msg);
+                }
             }
-            if(!oob_batch.isEmpty())
+            if(oob_batch != null && !oob_batch.isEmpty())
                 deliverBatch(oob_batch);
         }
 
