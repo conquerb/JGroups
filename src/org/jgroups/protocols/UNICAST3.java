@@ -689,16 +689,8 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
 
         // An OOB message is passed up immediately. Later, when remove() is called, we discard it. This affects ordering !
         // http://jira.jboss.com/jira/browse/JGRP-377
-        if(oob && added) {
-            if(log.isTraceEnabled())
-                log.trace("%s: delivering %s#%s", local_addr, sender, seqno);
-            try {
-                up_prot.up(evt);
-            }
-            catch(Throwable t) {
-                log.error(Util.getMessage("FailedToDeliverMsg"), local_addr, "OOB message", msg, t);
-            }
-        }
+        if(oob && added)
+            deliverMessage(msg, evt, sender, seqno);
 
         // we don't steal work if the message is internal (https://issues.jboss.org/browse/JGRP-1733)
         // we also don't care if the message was added successfully or not
@@ -731,7 +723,7 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
         int batch_size=msgs.size();
         Table<Message> win=entry.received_msgs;
         num_msgs_received+=batch_size;
-        boolean added=oob ? win.add(msgs, true) : win.add(msgs);
+        boolean added=win.add(msgs, oob);
 
         if(conn_expiry_timeout > 0)
             entry.update();
@@ -745,20 +737,14 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
 
         // OOB msg is passed up. When removed, we discard it. Affects ordering: http://jira.jboss.com/jira/browse/JGRP-379
         if(added && oob) {
+            MessageBatch oob_batch=new MessageBatch(local_addr, sender, null, false, MessageBatch.Mode.OOB, msgs.size());
             for(Tuple<Long,Message> tuple: msgs) {
-                long    seq=tuple.getVal1();
                 Message msg=tuple.getVal2();
-                if(msg.isFlagSet(Message.Flag.OOB) && msg.setTransientFlagIfAbsent(Message.TransientFlag.OOB_DELIVERED)) {
-                    if(log.isTraceEnabled())
-                        log.trace("%s: delivering %s#%s", local_addr, sender, seq);
-                    try {
-                        up_prot.up(new Event(Event.MSG, msg));
-                    }
-                    catch(Throwable t) {
-                        log.error(Util.getMessage("FailedToDeliverMsg"), local_addr, "OOB message", msg, t);
-                    }
-                }
+                if(msg.isFlagSet(Message.Flag.OOB) && msg.setTransientFlagIfAbsent(Message.TransientFlag.OOB_DELIVERED))
+                    oob_batch.add(msg);
             }
+            if(!oob_batch.isEmpty())
+                deliverBatch(oob_batch);
         }
 
         final AtomicBoolean processing=win.getProcessing();
@@ -793,25 +779,8 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
                     if(msg_to_deliver.isFlagSet(Message.Flag.OOB) && !msg_to_deliver.setTransientFlagIfAbsent(Message.TransientFlag.OOB_DELIVERED))
                         batch.remove(msg_to_deliver);
                 }
-                if(batch.isEmpty())
-                    continue;
-
-                try {
-                    if(log.isTraceEnabled()) {
-                        Message first=batch.first(), last=batch.last();
-                        StringBuilder sb=new StringBuilder(local_addr + ": delivering");
-                        if(first != null && last != null) {
-                            Header hdr1=(Header)first.getHeader(id), hdr2=(Header)last.getHeader(id);
-                            sb.append(" #").append(hdr1.seqno).append(" - #").append(hdr2.seqno);
-                        }
-                        sb.append(" (" + batch.size()).append(" messages)");
-                        log.trace(sb);
-                    }
-                    up_prot.up(batch);
-                }
-                catch(Throwable t) {
-                    log.error(Util.getMessage("FailedToDeliverMsg"), local_addr, "batch", batch, t);
-                }
+                if(!batch.isEmpty())
+                    deliverBatch(batch);
             }
         }
         finally {
@@ -954,6 +923,37 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
                 down_prot.down(new Event(Event.MSG, msg));
                 xmit_rsps_sent.incrementAndGet();
             }
+        }
+    }
+
+    protected void deliverMessage(final Message msg, final Event evt, final Address sender, final long seqno) {
+        if(log.isTraceEnabled())
+            log.trace("%s: delivering %s#%s", local_addr, sender, seqno);
+        try {
+            up_prot.up(evt);
+        }
+        catch(Throwable t) {
+            log.error(Util.getMessage("FailedToDeliverMsg"), local_addr, msg.isFlagSet(Message.Flag.OOB) ?
+              "OOB message" : "message", msg, t);
+        }
+    }
+
+    protected void deliverBatch(MessageBatch batch) {
+        try {
+            if(log.isTraceEnabled()) {
+                Message first=batch.first(), last=batch.last();
+                StringBuilder sb=new StringBuilder(local_addr + ": delivering");
+                if(first != null && last != null) {
+                    Header hdr1=(Header)first.getHeader(id), hdr2=(Header)last.getHeader(id);
+                    sb.append(" #").append(hdr1.seqno).append(" - #").append(hdr2.seqno);
+                }
+                sb.append(" (" + batch.size()).append(" messages)");
+                log.trace(sb);
+            }
+            up_prot.up(batch);
+        }
+        catch(Throwable t) {
+            log.error(Util.getMessage("FailedToDeliverMsg"), local_addr, "batch", batch, t);
         }
     }
 
