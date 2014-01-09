@@ -106,7 +106,7 @@ public class Table<T> {
     /**
      * Creates a new table
      * @param num_rows the number of rows in the matrix
-     * @param elements_per_row the number of messages per row
+     * @param elements_per_row the number of elements per row
      * @param offset the seqno before the first seqno to be inserted. E.g. if 0 then the first seqno will be 1
      * @param resize_factor teh factor with which to increase the number of rows
      * @param max_compaction_time the max time in milliseconds after we attempt a compaction
@@ -151,7 +151,7 @@ public class Table<T> {
     public void resetStats()             {num_compactions=num_moves=num_resizes=num_purges=0;}
 
     /** Returns the highest deliverable (= removable) seqno. This may be higher than {@link #getHighestDelivered()},
-     * e.g. if messages have been added but not yet removed */
+     * e.g. if elements have been added but not yet removed */
     public long getHighestDeliverable() {
         HighestDeliverable visitor=new HighestDeliverable();
         lock.lock();
@@ -198,9 +198,9 @@ public class Table<T> {
     }
 
     /**
-     * Adds messages from list to the table
+     * Adds elements from list to the table
      * @param list
-     * @return True if at least 1 message was added successfully
+     * @return True if at least 1 element was added successfully
      */
     public boolean add(final List<Tuple<Long,T>> list) {
        return add(list, false);
@@ -208,11 +208,24 @@ public class Table<T> {
 
 
     /**
-     * Adds messages from list to the table, removes messages from list that were not added to the table
+     * Adds elements from list to the table, removes elements from list that were not added to the table
      * @param list
-     * @return True if at least 1 message was added successfully. This guarantees that the list has at least 1 message
+     * @return True if at least 1 element was added successfully. This guarantees that the list has at least 1 element
      */
-    public boolean add(final List<Tuple<Long,T>> list, boolean remove_added_msgs) {
+    public boolean add(final List<Tuple<Long,T>> list, boolean remove_added_elements) {
+        return add(list, remove_added_elements, null);
+    }
+
+    /**
+     * Adds elements from the list to the table
+     * @param list The list of tuples of seqnos and elements. If remove_added_elements is true, if elements could
+     *             not be added to the table (e.g. because they were already present or the seqno was < HD), those
+     *             elements will be removed from list
+     * @param remove_added_elements If true, elements that could not be added to the table are removed from list
+     * @param const_value If non-null, this value should be used rather than the values of the list tuples
+     * @return True if at least 1 element was added successfully, false otherwise.
+     */
+    public boolean add(final List<Tuple<Long,T>> list, boolean remove_added_elements, T const_value) {
         if(list == null)
             return false;
         boolean added=false;
@@ -221,10 +234,10 @@ public class Table<T> {
             for(Iterator<Tuple<Long,T>> it=list.iterator(); it.hasNext();) {
                 Tuple<Long,T> tuple=it.next();
                 long seqno=tuple.getVal1();
-                T element=tuple.getVal2();
+                T element=const_value != null? const_value : tuple.getVal2();
                 if(_add(seqno, element))
                     added=true;
-                else if(remove_added_msgs)
+                else if(remove_added_elements)
                     it.remove();
             }
             return added;
@@ -572,7 +585,7 @@ public class Table<T> {
 
 
     /**
-     * Returns a list of missing (= null) messages
+     * Returns a list of missing (= null) elements
      * @return
      */
     public SeqnoList getMissing() {
