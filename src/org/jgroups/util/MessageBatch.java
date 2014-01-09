@@ -92,6 +92,7 @@ public class MessageBatch implements Iterable<Message> {
     public MessageBatch clusterName(String name) {this.cluster_name=name; return this;}
     public boolean      multicast()              {return multicast;}
     public Mode         mode()                   {return mode;}
+    public MessageBatch mode(Mode mode)          {this.mode=mode; return this;}
     public int          capacity()               {return messages.length;}
 
 

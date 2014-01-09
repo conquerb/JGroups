@@ -1,10 +1,7 @@
 package org.jgroups.tests;
 
 import org.jgroups.Global;
-import org.jgroups.util.SeqnoList;
-import org.jgroups.util.Table;
-import org.jgroups.util.Tuple;
-import org.jgroups.util.Util;
+import org.jgroups.util.*;
 import org.testng.annotations.Test;
 
 import java.util.ArrayList;
@@ -538,6 +535,47 @@ public class TableTest {
         table.purge(12);
         assertIndices(table, 12, 12, 20);
         assert table.size() == 6 && table.getNumMissing() == 2;
+    }
+
+    public static void testRemoveManyWithFilter() {
+        Table<Integer> table=new Table<Integer>(3, 10, 0);
+        for(int i=1; i <= 10; i++)
+            table.add(i, i);
+        List<Integer> list=table.removeMany(null,true,0,new Filter<Integer>() {
+            public boolean accept(Integer element) {
+                return element % 2 == 0;
+            }
+        });
+        System.out.println("list = " + list);
+        System.out.println("table = " + table);
+        assert list.size() == 5;
+        assert table.isEmpty();
+        for(Integer num: Arrays.asList(2,4,6,8,10))
+            assert list.contains(num);
+    }
+
+    public static void testRemoveManyWithFilterAcceptAll() {
+        Table<Integer> table=new Table<Integer>(3, 10, 0);
+        for(int i=1; i <= 10; i++)
+            table.add(i, i);
+        List<Integer> list=table.removeMany(null,true,0,new Filter<Integer>() {
+            public boolean accept(Integer element) {return true;}});
+        System.out.println("list = " + list);
+        System.out.println("table = " + table);
+        assert list.size() == 10;
+        assert table.isEmpty();
+    }
+
+    public static void testRemoveManyWithFilterAcceptNone() {
+        Table<Integer> table=new Table<Integer>(3, 10, 0);
+        for(int i=1; i <= 10; i++)
+            table.add(i, i);
+        List<Integer> list=table.removeMany(null,true,0,new Filter<Integer>() {
+            public boolean accept(Integer element) {return false;}});
+        System.out.println("list = " + list);
+        System.out.println("table = " + table);
+        assert list == null;
+        assert table.isEmpty();
     }
 
 

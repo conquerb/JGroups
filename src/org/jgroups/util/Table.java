@@ -339,11 +339,20 @@ public class Table<T> {
         return removeMany(null, nullify, max_results);
     }
 
-
     public List<T> removeMany(final AtomicBoolean processing, boolean nullify, int max_results) {
+        return removeMany(processing, nullify, max_results, null);
+    }
+
+
+    /**
+     * Removes between 0 and max_results elements from the table and returns them in a list. If filter is non-null,
+     * only elements which the filter accepts are returned. Note that elements are always removed from the table,
+     * but may or may not get added to the returned list.
+     */
+    public List<T> removeMany(final AtomicBoolean processing, boolean nullify, int max_results, Filter<T> filter) {
         lock.lock();
         try {
-            Remover remover=new Remover(nullify, max_results);
+            Remover remover=new Remover(nullify, max_results, filter);
             forEach(hd+1, hr, remover);
             List<T> retval=remover.getList();
             if(processing != null && (retval == null || retval.isEmpty()))
@@ -681,14 +690,20 @@ public class Table<T> {
 
 
     protected class Remover implements Visitor<T> {
-        protected final boolean nullify;
-        protected final int     max_results;
-        protected List<T>       list;
-        protected int           num_results;
+        protected final boolean      nullify;
+        protected final int          max_results;
+        protected List<T>            list;
+        protected int                num_results;
+        protected final Filter<T>    filter;
 
         public Remover(boolean nullify, int max_results) {
+            this(nullify, max_results, null);
+        }
+
+        public Remover(boolean nullify, int max_results, Filter<T> filter) {
             this.nullify=nullify;
             this.max_results=max_results;
+            this.filter=filter;
         }
 
         public List<T> getList() {return list;}
@@ -696,9 +711,11 @@ public class Table<T> {
         @GuardedBy("lock")
         public boolean visit(long seqno, T element, int row, int column) {
             if(element != null) {
-                if(list == null)
-                    list=new LinkedList<T>();
-                list.add(element);
+                if(filter == null || filter.accept(element)) {
+                    if(list == null)
+                        list=new LinkedList<T>();
+                    list.add(element);
+                }
                 if(seqno > hd)
                     hd=seqno;
                 size=Math.max(size-1, 0); // cannot be < 0 (well that would be a bug, but let's have this 2nd line of defense !)
