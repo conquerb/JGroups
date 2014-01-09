@@ -60,8 +60,6 @@ public class TableTest {
             assert num == DUMMY;
     }
 
-
-
     public void testAddListWithRemoval() {
         Table<Integer> buf=new Table<Integer>(3, 10, 0);
         List<Tuple<Long,Integer>> msgs=createList(1,2,3,4,5,6,7,8,9,10);
@@ -144,6 +142,29 @@ public class TableTest {
     }
 
 
+    public static void testAddListWithResizing() {
+        Table<Integer> table=new Table<Integer>(3, 5, 0);
+        List<Tuple<Long,Integer>> msgs=new ArrayList<Tuple<Long,Integer>>();
+        for(int i=1; i < 100; i++)
+            msgs.add(new Tuple<Long,Integer>((long)i,i));
+        table.add(msgs, false);
+        System.out.println("table = " + table);
+        int num_resizes=table.getNumResizes();
+        System.out.println("num_resizes = " + num_resizes);
+        assert num_resizes == 1 : "number of resizings=" + num_resizes + " (expected 1)";
+    }
+
+    public static void testAddListWithResizing2() {
+        Table<Integer> table=new Table<Integer>(3, 500, 0);
+        List<Tuple<Long,Integer>> msgs=new ArrayList<Tuple<Long,Integer>>();
+        for(int i=1; i < 100; i++)
+            msgs.add(new Tuple<Long,Integer>((long)i,i));
+        table.add(msgs, false);
+        System.out.println("table = " + table);
+        int num_resizes=table.getNumResizes();
+        System.out.println("num_resizes = " + num_resizes);
+        assert num_resizes == 0 : "number of resizings=" + num_resizes + " (expected 0)";
+    }
 
     public static void testAdditionWithOffset2() {
         Table<Integer> table=new Table<Integer>(3, 10, 2);

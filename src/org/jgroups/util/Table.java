@@ -190,7 +190,7 @@ public class Table<T> {
     public boolean add(long seqno, T element) {
         lock.lock();
         try {
-            return _add(seqno, element);
+            return _add(seqno, element, true);
         }
         finally {
             lock.unlock();
@@ -226,16 +226,21 @@ public class Table<T> {
      * @return True if at least 1 element was added successfully, false otherwise.
      */
     public boolean add(final List<Tuple<Long,T>> list, boolean remove_added_elements, T const_value) {
-        if(list == null)
+        if(list == null || list.isEmpty())
             return false;
         boolean added=false;
         lock.lock();
         try {
+            // find the highest seqno (unfortunately, the list is not ordered by seqno)
+            long highest_seqno=findHighestSeqno(list);
+            if(highest_seqno != -1 && computeRow(highest_seqno) >= matrix.length)
+                resize(highest_seqno);
+
             for(Iterator<Tuple<Long,T>> it=list.iterator(); it.hasNext();) {
                 Tuple<Long,T> tuple=it.next();
                 long seqno=tuple.getVal1();
                 T element=const_value != null? const_value : tuple.getVal2();
-                if(_add(seqno, element))
+                if(_add(seqno, element, false))
                     added=true;
                 else if(remove_added_elements)
                     it.remove();
@@ -481,12 +486,12 @@ public class Table<T> {
         }
     }
 
-    protected boolean _add(long seqno, T element) {
+    protected boolean _add(long seqno, T element, boolean check_if_resize_needed) {
         if(seqno <= hd)
             return false;
 
         int row_index=computeRow(seqno);
-        if(row_index >= matrix.length) {
+        if(check_if_resize_needed && row_index >= matrix.length) {
             resize(seqno);
             row_index=computeRow(seqno);
         }
@@ -501,6 +506,17 @@ public class Table<T> {
             return true;
         }
         return false;
+    }
+
+    // list must not be null or empty
+    protected long findHighestSeqno(List<Tuple<Long,T>> list) {
+        long seqno=-1;
+        for(Tuple<Long,T> tuple: list) {
+            Long val=tuple.getVal1();
+            if(val != null && val > seqno)
+                seqno=val;
+        }
+        return seqno;
     }
 
     /** Moves rows down the matrix, by removing purged rows. If resizing to accommodate seqno is still needed, computes
